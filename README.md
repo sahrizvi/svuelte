@@ -8,7 +8,7 @@ For now, this tool only works on SFC (Single File Components) individually, conv
 ## Installation and usage
 
 ```
-npm install -g svuelte
+npm install -g https://github.com/sahrizvi/svuelte.git
 ```
 
 This will make `svuelte` available globally. Now you can run it:
