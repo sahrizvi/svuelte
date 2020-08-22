@@ -245,7 +245,7 @@ if (sfc.script) {
   }
 
   if (exportDef) {
-    const props = exportDef.declaration.properties;
+    const props = exportDef.declaration.properties || []; // props can be undefined, undefined is not iterable
     let imports = [];
     let params = [];
     let data = [];
