@@ -9,6 +9,27 @@ const chalk = require('chalk');
 const path = require('path');
 const fs = require('fs');
 
+// parser config
+
+const babel_parser_config = {
+  sourceType: 'module',
+  plugins: [
+
+    // when babel parser fails with 'missingPlugin: [ .... ]'
+    // you must add some of these babel plugins here
+    // and install the corresponding node packages
+
+    //"typescript", // @babel/preset-typescript
+    //"flow", // @babel/preset-flow
+    //"decorators", // babel-plugin-transform-decorators
+    //"decorators-legacy", // babel-plugin-transform-decorators-legacy
+    //"classProperties", // babel-plugin-transform-class-properties
+
+    // https://babeljs.io/docs/en/babel-parser#plugins
+
+  ],
+};
+
 // Funcs
 
 const quoteBindedAttrs = true;
@@ -220,9 +241,7 @@ const HOOKS = {
 };
 
 if (sfc.script) {
-  const script = babelParser.parse(sfc.script.content, {
-    sourceType: 'module',
-  });
+  const script = babelParser.parse(sfc.script.content, babel_parser_config);
 
   const body = script.program.body;
   let exportDef = null;
