@@ -245,7 +245,7 @@ if (sfc.script) {
   }
 
   if (exportDef) {
-    const props = exportDef.declaration.properties;
+
     let imports = [];
     let params = [];
     let data = [];
@@ -253,165 +253,201 @@ if (sfc.script) {
     let methods = [];
     let beforeCreate = null;
     let created = null;
-    for (let prop of props) {
-      if (prop.key.type !== 'Identifier') {
-        console.log(chalk`{yellow Warning: in default export,} {greenBright ${babelGenerator(prop.key).code}} {yellow is not an identifier, ignoring it.}`);
-        continue;
-      }
+    let o = ''; // output string
 
-      switch (prop.key.name) {
-        case 'name':
-          // Ignore for now
-          break;
-        case 'props':
-          if (prop.value.type === 'ObjectExpression') {
-            for (let param of prop.value.properties) {
-              if (param.value.type === 'Identifier') {
-                params.push(`export let ${babelGenerator(param.key).code}; // ${param.value.name}`);
+    switch (exportDef.declaration.type) {
+
+      case 'ObjectExpression':
+
+        // export default {key: 'val'};
+
+        // vue:
+        //   export default {
+        //     name: "Test",
+        //     props: {
+        //       msg: String
+        //     }
+        //   }
+
+        const props = exportDef.declaration.properties;
+
+        for (let prop of props) {
+          if (prop.key.type !== 'Identifier') {
+            console.log(chalk`{yellow Warning: in default export,} {greenBright ${babelGenerator(prop.key).code}} {yellow is not an identifier, ignoring it.}`);
+            continue;
+          }
+
+          switch (prop.key.name) {
+            case 'name':
+              // Ignore for now
+              break;
+            case 'props':
+              if (prop.value.type === 'ObjectExpression') {
+                for (let param of prop.value.properties) {
+                  if (param.value.type === 'Identifier') {
+                    params.push(`export let ${babelGenerator(param.key).code}; // ${param.value.name}`);
+                  } else
+                  if (param.value.type === 'ObjectExpression') {
+                    let props = {};
+                    for (let prop of param.value.properties) {
+                      props[prop.key.name] = prop.value;
+                    }
+                    let def = `export let ${babelGenerator(param.key).code}`;
+                    if (props.default) {
+                      def += ` = ${babelGenerator(props.default).code}`;
+                    }
+                    def += ';';
+                    if (props.type) {
+                      def += ` // ${babelGenerator(props.type).code}`;
+                    }
+                    if (props.required) {
+                      def += props.type ? ', required' : ' // required';
+                    }
+                    if (props.validator) {
+                      console.log(chalk`{yellow Warning: prop} {greenBright ${babelGenerator(param.key).code}} {yellow validator is ignored.}`);
+                    }
+                    params.push(def);
+                  } else {
+                    console.log(chalk`{yellow Warning: unexpected prop} {greenBright ${babelGenerator(param.key).code}} {yellow declaration:} {greenBright ${babelGenerator(param.value).code}}{yellow , ignoring it.}`);
+                    continue;
+                  }
+                }
               } else
-              if (param.value.type === 'ObjectExpression') {
-                let props = {};
-                for (let prop of param.value.properties) {
-                  props[prop.key.name] = prop.value;
+              if (prop.value.type === 'ArrayExpression') {
+                for (let param of prop.value.elements) {
+                  if (param.type === 'StringLiteral') {
+                    params.push(`export let ${param.value};`);  
+                  } else {
+                    console.log(chalk`{yellow Warning: unexpected prop} {greenBright ${babelGenerator(param).code}}{yellow , ignoring it.}`);
+                    continue;
+                  }
                 }
-                let def = `export let ${babelGenerator(param.key).code}`;
-                if (props.default) {
-                  def += ` = ${babelGenerator(props.default).code}`;
-                }
-                def += ';';
-                if (props.type) {
-                  def += ` // ${babelGenerator(props.type).code}`;
-                }
-                if (props.required) {
-                  def += props.type ? ', required' : ' // required';
-                }
-                if (props.validator) {
-                  console.log(chalk`{yellow Warning: prop} {greenBright ${babelGenerator(param.key).code}} {yellow validator is ignored.}`);
-                }
-                params.push(def);
               } else {
-                console.log(chalk`{yellow Warning: unexpected prop} {greenBright ${babelGenerator(param.key).code}} {yellow declaration:} {greenBright ${babelGenerator(param.value).code}}{yellow , ignoring it.}`);
+                console.log(chalk`{yellow Warning: in default export,} {greenBright props} {yellow property is neither an array nor an object, ignoring it.}`);
                 continue;
               }
-            }
-          } else
-          if (prop.value.type === 'ArrayExpression') {
-            for (let param of prop.value.elements) {
-              if (param.type === 'StringLiteral') {
-                params.push(`export let ${param.value};`);  
-              } else {
-                console.log(chalk`{yellow Warning: unexpected prop} {greenBright ${babelGenerator(param).code}}{yellow , ignoring it.}`);
+              break;
+            case 'beforeCreate':
+              if (prop.type !== 'ObjectMethod') {
+                console.log(chalk`{yellow Warning: in default export, {greenBright ${prop.key.name}} is not a function, ignoring it.}`);
                 continue;
               }
-            }
-          } else {
-            console.log(chalk`{yellow Warning: in default export,} {greenBright props} {yellow property is neither an array nor an object, ignoring it.}`);
-            continue;
-          }
-          break;
-        case 'beforeCreate':
-          if (prop.type !== 'ObjectMethod') {
-            console.log(chalk`{yellow Warning: in default export, {greenBright ${prop.key.name}} is not a function, ignoring it.}`);
-            continue;
-          }
-          beforeCreate = unwrapFunctionBody(prop);
-          break;
-        case 'created':
-          if (prop.type !== 'ObjectMethod') {
-            console.log(chalk`{yellow Warning: in default export, {greenBright ${prop.key.name}} is not a function, ignoring it.}`);
-            continue;
-          }
-          created = unwrapFunctionBody(prop);
-          break;
-        case 'mounted':
-        case 'beforeUpdate':
-        case 'updated':
-        case 'destroyed':
-          if (prop.type !== 'ObjectMethod') {
-            console.log(chalk`{yellow Warning: in default export, {greenBright ${prop.key.name}} is not a function, ignoring it.}`);
-            continue;
-          }
-
-          prop.type = 'ArrowFunctionExpression';
-          imports.push(HOOKS[prop.key.name]);
-          methods.push(`${HOOKS[prop.key.name]}(${babelGenerator(processScriptNode(prop)).code});`);
-          break;
-        case 'data':
-          let obj;
-          if (prop.type === 'ObjectMethod') {
-            if (prop.body.type === 'BlockStatement' &&
-                  prop.body.body.length === 1 &&
-                  prop.body.body[0].type === 'ReturnStatement' &&
-                  prop.body.body[0].argument.type === 'ObjectExpression') {
-              obj = prop.body.body[0].argument;
-            } else {
-              console.log(chalk`{yellow Warning: in default export,} {greenBright data} {yellow property contains too complex function, ignoring it.}`);
-              continue;
-            }
-          } else
-          if (prop.value.type === 'ObjectExpression') {
-            obj = prop.value;
-          } else {
-            console.log(chalk`{yellow Warning: in default export,} {greenBright data} {yellow property is not an object expression, ignoring it.}`);
-            continue;
-          }
-
-          for (let param of obj.properties) {
-            data.push(`let ${babelGenerator(param.key).code} = ${babelGenerator(processScriptNode(param.value)).code};`);
-          }
-          break;
-        // watch
-        case 'computed':
-          if (prop.value.type !== 'ObjectExpression') {
-            console.log(chalk`{yellow Warning: in default export,} {greenBright computed} {yellow property is not an object expression, ignoring it.}`);
-            continue;
-          }
-
-          // TODO: {get, set} format
-          // TODO: vm => vm.a * 2 format
-
-          for (let param of prop.value.properties) {
-            if (param.type === 'ObjectMethod') {
-              if (param.body.type === 'BlockStatement' &&
-                    param.body.body.length === 1 &&
-                    param.body.body[0].type === 'ReturnStatement') {
-                computed.push(`$: ${babelGenerator(param.key).code} = ${babelGenerator(processScriptNode(param.body.body[0].argument)).code};`);
-              } else {
-                param.type = 'ArrowFunctionExpression';
-                computed.push(`$: ${babelGenerator(param.key).code} = (${babelGenerator(processScriptNode(param)).code})();`);
+              beforeCreate = unwrapFunctionBody(prop);
+              break;
+            case 'created':
+              if (prop.type !== 'ObjectMethod') {
+                console.log(chalk`{yellow Warning: in default export, {greenBright ${prop.key.name}} is not a function, ignoring it.}`);
+                continue;
               }
-            } else {
-              console.log(chalk`{yellow Warning: unexpected computed} {greenBright ${babelGenerator(param.key).code}} {yellow declaration:} {greenBright ${babelGenerator(param).code}}{yellow , ignoring it.}`);
-              continue;
-            }
-          }
-          break;
-        case 'methods':
-          if (prop.value.type !== 'ObjectExpression') {
-            console.log(chalk`{yellow Warning: in default export,} {greenBright methods} {yellow property is not an object expression, ignoring it.}`);
-            continue;
-          }
+              created = unwrapFunctionBody(prop);
+              break;
+            case 'mounted':
+            case 'beforeUpdate':
+            case 'updated':
+            case 'destroyed':
+              if (prop.type !== 'ObjectMethod') {
+                console.log(chalk`{yellow Warning: in default export, {greenBright ${prop.key.name}} is not a function, ignoring it.}`);
+                continue;
+              }
 
-          for (let method of prop.value.properties) {
-            if (method.type !== 'ObjectMethod') {
-              console.log(chalk`{yellow Warning: in default export, method {greenBright ${babelGenerator(method.key).code}} is not a function, ignoring it.}`);
-              continue;
-            }
+              prop.type = 'ArrowFunctionExpression';
+              imports.push(HOOKS[prop.key.name]);
+              methods.push(`${HOOKS[prop.key.name]}(${babelGenerator(processScriptNode(prop)).code});`);
+              break;
+            case 'data':
+              let obj;
+              if (prop.type === 'ObjectMethod') {
+                if (prop.body.type === 'BlockStatement' &&
+                      prop.body.body.length === 1 &&
+                      prop.body.body[0].type === 'ReturnStatement' &&
+                      prop.body.body[0].argument.type === 'ObjectExpression') {
+                  obj = prop.body.body[0].argument;
+                } else {
+                  console.log(chalk`{yellow Warning: in default export,} {greenBright data} {yellow property contains too complex function, ignoring it.}`);
+                  continue;
+                }
+              } else
+              if (prop.value.type === 'ObjectExpression') {
+                obj = prop.value;
+              } else {
+                console.log(chalk`{yellow Warning: in default export,} {greenBright data} {yellow property is not an object expression, ignoring it.}`);
+                continue;
+              }
 
-            method.type = 'FunctionDeclaration';
-            method.id = method.key;
-            methods.push(babelGenerator(processScriptNode(method, true)).code);
+              for (let param of obj.properties) {
+                data.push(`let ${babelGenerator(param.key).code} = ${babelGenerator(processScriptNode(param.value)).code};`);
+              }
+              break;
+            // watch
+            case 'computed':
+              if (prop.value.type !== 'ObjectExpression') {
+                console.log(chalk`{yellow Warning: in default export,} {greenBright computed} {yellow property is not an object expression, ignoring it.}`);
+                continue;
+              }
+
+              // TODO: {get, set} format
+              // TODO: vm => vm.a * 2 format
+
+              for (let param of prop.value.properties) {
+                if (param.type === 'ObjectMethod') {
+                  if (param.body.type === 'BlockStatement' &&
+                        param.body.body.length === 1 &&
+                        param.body.body[0].type === 'ReturnStatement') {
+                    computed.push(`$: ${babelGenerator(param.key).code} = ${babelGenerator(processScriptNode(param.body.body[0].argument)).code};`);
+                  } else {
+                    param.type = 'ArrowFunctionExpression';
+                    computed.push(`$: ${babelGenerator(param.key).code} = (${babelGenerator(processScriptNode(param)).code})();`);
+                  }
+                } else {
+                  console.log(chalk`{yellow Warning: unexpected computed} {greenBright ${babelGenerator(param.key).code}} {yellow declaration:} {greenBright ${babelGenerator(param).code}}{yellow , ignoring it.}`);
+                  continue;
+                }
+              }
+              break;
+            case 'methods':
+              if (prop.value.type !== 'ObjectExpression') {
+                console.log(chalk`{yellow Warning: in default export,} {greenBright methods} {yellow property is not an object expression, ignoring it.}`);
+                continue;
+              }
+
+              for (let method of prop.value.properties) {
+                if (method.type !== 'ObjectMethod') {
+                  console.log(chalk`{yellow Warning: in default export, method {greenBright ${babelGenerator(method.key).code}} is not a function, ignoring it.}`);
+                  continue;
+                }
+
+                method.type = 'FunctionDeclaration';
+                method.id = method.key;
+                methods.push(babelGenerator(processScriptNode(method, true)).code);
+              }
+              break;
+            default:
+              console.log(chalk`{yellow Warning: in default export,} {greenBright ${babelGenerator(prop.key).code}} {yellow is an unknown property, ignoring it.}`);
           }
-          break;
-        default:
-          console.log(chalk`{yellow Warning: in default export,} {greenBright ${babelGenerator(prop.key).code}} {yellow is an unknown property, ignoring it.}`);
-      }
+        }
+
+        o = '';
+        o += '<script>\n';
+        o += imports.length ? 'import { ' + imports.join(', ') + " } from 'svelte';\n" : '';
+        o += params.concat(data, computed).join('\n');
+        o += beforeCreate ? '\n// beforeCreate:\n' + beforeCreate + '\n' : '';
+        o += created ? '\n// created:\n' + created + '\n' : '';
+        o += methods.join('\n\n');
+        o += '</script>\n\n';
+        output.push(o);
+
+        break; // case 'ObjectExpression'
+
+      default:
+
+        o = '';
+        o += '<script>\n';
+        o += '// copy paste:\n';
+        o += babelGenerator(exportDef).code;
+        o += '\n</script>\n\n';
+        output.push(o);
+
     }
-    output.push(`<script>${imports.length ? '\nimport { ' + imports.join(', ') + ' } from \'svelte\';' : ''}
-${params.concat(data, computed).join('\n')}
-${beforeCreate ? '\n// beforeCreate:\n' + beforeCreate + '\n' : ''}${created ? '\n// created:\n' + created + '\n' : ''}
-${methods.join('\n\n')}
-</script>\n\n`);
   }
 }
 
